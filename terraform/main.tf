@@ -97,18 +97,18 @@ resource "aws_s3_bucket_public_access_block" "lambda_code_public_access_block" {
 resource "aws_s3_object" "lambda_code" {
   bucket = aws_s3_bucket.lambda_code.id
   key    = "lambda_function.zip"
-  source = "lambda_function.zip"
-  etag   = filemd5("lambda_function.zip")
+  source = "../dist/lambda_function.zip"
+  etag   = filemd5("../dist/lambda_function.zip")
 }
 
 
 # ------------------------------
 # Lambda Function Definition
 # ------------------------------
-data "aws_lambda_layer_version" "pandas" {
-  layer_name = "AWSSDKPandas-Python310"
-  version    = 20
-}
+# data "aws_lambda_layer_version" "pandas" {
+#   layer_name = "AWSSDKPandas-Python310"
+#   version    = 20
+# }
 
 resource "aws_lambda_function" "nytaxi_loader" {
   function_name     = "nytaxi_data_loader"
@@ -120,7 +120,7 @@ resource "aws_lambda_function" "nytaxi_loader" {
   
   s3_bucket        = aws_s3_bucket.lambda_code.id
   s3_key           = aws_s3_object.lambda_code.key
-  source_code_hash = filebase64sha256("lambda_function.zip")
+  source_code_hash = filebase64sha256("../dist/lambda_function.zip")
 
 ## Optional: If we want to add layers 
 #   layers = [
@@ -129,7 +129,9 @@ resource "aws_lambda_function" "nytaxi_loader" {
 #      data.aws_lambda_layer_version.pandas.arn
 #   ]
   layers = [
-      data.aws_lambda_layer_version.pandas.arn
+      # Source: https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html
+      "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python310:22" # hardcoded pandasSDK
+      #data.aws_lambda_layer_version.pandas.arn
     ]
 
   environment {
