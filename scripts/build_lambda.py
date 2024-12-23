@@ -6,22 +6,22 @@ import sys
 
 def create_single_layer_package(package_name, layer_name, python_version="3.10", platform="manylinux2014_x86_64"):
     """Create a single package Lambda layer."""
-    if os.path.exists("layer"):
-        shutil.rmtree("layer")
-    os.makedirs(f"layer/python/lib/python{python_version}/site-packages", exist_ok=True)
+    if os.path.exists("dist/layer"):
+        shutil.rmtree("dist/layer")
+    os.makedirs(f"dist/layer/python/lib/python{python_version}/site-packages", exist_ok=True)
 
     subprocess.run([
         sys.executable, "-m", "pip", "install",
         package_name,
-        f"--target=layer/python/lib/python{python_version}/site-packages",
+        f"--target=dist/layer/python/lib/python{python_version}/site-packages",
         "--platform", platform,
         "--only-binary=:all:",
         "--implementation", "cp",
         "--python-version", python_version,
-        "--no-deps"  # Important: don't install dependencies
+        #"--no-deps"  # Important: don't install dependencies
     ], check=True)
 
-    for root, dirs, files in os.walk("layer"):
+    for root, dirs, files in os.walk("dist/layer"):
         for dir_name in dirs:
             if dir_name in ['tests', 'test', '__pycache__', 'examples']:
                 shutil.rmtree(os.path.join(root, dir_name))
@@ -29,11 +29,11 @@ def create_single_layer_package(package_name, layer_name, python_version="3.10",
             if file_name.endswith(('.pyc', '.pyo', '.c', '.h', '.html', '.txt')):
                 os.remove(os.path.join(root, file_name))
 
-    zip_name = f"lambda_layer_{layer_name}"
-    shutil.make_archive(zip_name, "zip", "layer")
+    zip_name = f"dist/lambda_layer_{layer_name}"
+    shutil.make_archive(zip_name, "zip", "dist/layer")
 
-    shutil.rmtree("layer")
-    print(f"{layer_name} layer size: {os.path.getsize(f'{zip_name}.zip') / (1024*1024):.2f} MB")
+    shutil.rmtree("dist/layer")
+    print(f"{layer_name} layer size: {os.path.getsize(f'{zip_name}.zip') / (1024*1024):.4f} MB")
 
 def create_lambda_package(overwrite=False):
     """Create a Lambda package."""
@@ -69,4 +69,3 @@ if __name__ == "__main__":
         create_single_layer_package(package, layer_name, python_version=args.python_version, platform=args.platform)
     else:
         create_lambda_package(overwrite=args.overwrite)
-        

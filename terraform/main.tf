@@ -102,42 +102,51 @@ resource "aws_s3_object" "lambda_code" {
 }
 
 
+# ----------------------------------------
+# Add custom lambda layer
+# ----------------------------------------
+
+# S3 object for Lambda layer
+resource "aws_s3_object" "requests_layer" {
+  bucket = aws_s3_bucket.lambda_code.id
+  key    = "lambda_layer_requests.zip"
+  source = "../dist/lambda_layer_requests.zip"
+  etag   = filemd5("../dist/lambda_layer_requests.zip")
+}
+
+resource "aws_lambda_layer_version" "requests_layer" {
+  filename            = "../dist/lambda_layer_requests.zip"
+  layer_name          = "requests_layer"
+  description         = "Layer for requests"
+  compatible_runtimes = ["python3.10"]
+}
+
 # ------------------------------
 # Lambda Function Definition
 # ------------------------------
-# data "aws_lambda_layer_version" "pandas" {
-#   layer_name = "AWSSDKPandas-Python310"
-#   version    = 20
-# }
-
 resource "aws_lambda_function" "nytaxi_loader" {
-  function_name     = "nytaxi_data_loader"
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "lambda_function.lambda_handler"
-  runtime          = "python3.10"
-  timeout          = 300
-  memory_size      = 1024
-  
+  function_name = "nytaxi_data_loader"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.10"
+  timeout       = 300
+  memory_size   = 1024
+
   s3_bucket        = aws_s3_bucket.lambda_code.id
   s3_key           = aws_s3_object.lambda_code.key
   source_code_hash = filebase64sha256("../dist/lambda_function.zip")
 
-## Optional: If we want to add layers 
-#   layers = [
-#     #aws_lambda_layer_version.pandas_layer.arn,
-#     #aws_lambda_layer_version.pyarrow_layer.arn
-#      data.aws_lambda_layer_version.pandas.arn
-#   ]
+
   layers = [
-      # Source: https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html
-      "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python310:22" # hardcoded pandasSDK
-      #data.aws_lambda_layer_version.pandas.arn
-    ]
+    aws_lambda_layer_version.requests_layer.arn,
+    # Source: https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html
+    #"arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python310:22" # hardcoded pandasSDK
+  ]
 
   environment {
     variables = {
       BUCKET_NAME = aws_s3_bucket.my_bucket.id
-      REGION     = var.region
+      REGION      = var.region
     }
   }
 }
@@ -165,40 +174,4 @@ resource "aws_lambda_function" "nytaxi_loader" {
 # resource "aws_iam_role_policy_attachment" "lambda_secrets_policy" {
 #   role       = aws_iam_role.lambda_role.name
 #   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
-# }
-
-
-
-# ----------------------------------------
-# Optional: Add custom lambda layer
-# ----------------------------------------
-
-# # S3 object for Lambda layer
-# resource "aws_s3_object" "pandas_layer" {
-#   bucket = aws_s3_bucket.lambda_code.id
-#   key    = "lambda_layer_pandas.zip"
-#   source = "lambda_layer_pandas.zip"
-#   etag   = filemd5("lambda_layer_pandas.zip")
-# }
-
-# # S3 object for Lambda layer
-# resource "aws_s3_object" "pyarrow_layer" {
-#   bucket = aws_s3_bucket.lambda_code.id
-#   key    = "lambda_layer_pyarrow.zip"
-#   source = "lambda_layer_pyarrow.zip"
-#   etag   = filemd5("lambda_layer_pyarrow.zip")
-# }
-
-# resource "aws_lambda_layer_version" "pandas_layer" {
-#   filename            = "lambda_layer_pandas.zip"
-#   layer_name          = "pandas_layer"
-#   description         = "Layer for pandas"
-#   compatible_runtimes = ["python3.10"]
-# }
-
-# resource "aws_lambda_layer_version" "pyarrow_layer" {
-#   filename            = "lambda_layer_pyarrow.zip"
-#   layer_name          = "pyarrow_layer"
-#   description         = "Layer for pyarrow"
-#   compatible_runtimes = ["python3.10"]
 # }

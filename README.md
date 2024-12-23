@@ -42,6 +42,26 @@ project-root/
 │
 └── pyproject.toml
 ```
+
+### Start Project
+```bash
+cd terraform
+terraform init
+
+python scripts/build_lambda.py --overwrite   # --overwrite, if any lambda functions are changed
+python scripts/build_lambda.py --layer requests requests
+
+terraform validate
+terraform plan
+terraform apply
+aws lambda invoke --function-name nytaxi_data_loader output.txt
+```
+
+### Progress Update
+
+The diagram will be updated to reflect the services and workflow as progress continues.
+![archdiagram](assests/DataEngArch.drawio.png)
+
 ### Milestones
 
 
@@ -53,17 +73,21 @@ project-root/
 **~~Create a Basic Lambda Function~~**
 * ~~Write a simple AWS Lambda function to print pandas data~~
 
-**Ingest Raw NYC Taxi Data**
+**~~Ingest Raw NYC Taxi Data BASIC~~**
 
-* Extend the Lambda function to fetch sample NYC taxi data (100 rows for testing).
-* Load the raw data into the bronze S3 bucket.
+* ~~Extend the Lambda function to fetch sample NYC taxi data.~~
+* ~~Load the raw data into the bronze S3 bucket.~~
+
+**Orchestrate Workflow with Step Functions**
+* Use AWS Step Functions to manage the ETL pipeline workflow.
+
+**Ingest Raw NYC Taxi Data Secheduled Monthly**
+
+* Load data to bronze s3 based monthly(nyc data updated monthly, )
 
 **Transform Data with AWS Glue**
 * Create an AWS Glue job to process raw data from the bronze bucket.
 * Load the processed data into the gold bucket.
-
-**Orchestrate Workflow with Step Functions**
-* Use AWS Step Functions to manage the ETL pipeline workflow.
 
 **Enable Monitoring and Logging**
 * Integrate AWS CloudWatch, EventBridge, and SNS for logging and notifications.
@@ -133,7 +157,9 @@ terraform apply
 
 ### Configure Resources
 
-Note: Using harcoded Pandas SDK. [ARM LINK](https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html)
+Terraform code: `main.tf`
+
+Note: Using harcoded Pandas SDK. [ARN LINK](https://aws-sdk-pandas.readthedocs.io/en/stable/layers.html)
 
 ### **S3 Bucket Configuration:**
 
@@ -203,6 +229,19 @@ Note: Using harcoded Pandas SDK. [ARM LINK](https://aws-sdk-pandas.readthedocs.i
             - `BUCKET_NAME`: The ID of the `my_bucket`.
             - `REGION`: A region variable.
         - Uses `Pandas SDK layer`: "arn:aws:lambda:us-east-2:336392948345:layer:AWSSDKPandas-Python310:22"
+
+
+---
+### **Custom Lambda Layer Configuration:**
+
+1. **aws_s3_object.requests_layer**:
+    - Uploads the Lambda layer ZIP file for requests package (lambda_layer_requests.zip) to the S3 bucket used for Lambda code storage.
+    - Uses the MD5 checksum (etag) to ensure the integrity of the uploaded file.
+
+2. **aws_lambda_layer_version.requests_layer:**
+    - Creates a new Lambda layer for requests package using the uploaded ZIP file.
+---
+
 
 ### Test Lambda function
 

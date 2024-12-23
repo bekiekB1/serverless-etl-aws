@@ -1,39 +1,40 @@
-import pandas as pd
 import boto3
-from io import BytesIO
+import requests
 import os
 import json
 from datetime import datetime
 
 def lambda_handler(event, context):
     try:
-        # Create a simple test DataFrame
-        df = pd.DataFrame({
-            'test_column': range(5)
-        })
+        data_url = "https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet"
         
-        # Get the bucket name from environment variables
+        response = requests.get(data_url, stream=True)
+        if response.status_code != 200:
+            raise Exception(f"Failed to download data. Status code: {response.status_code}")
+        
         bucket_name = os.environ['BUCKET_NAME']
         
-        # Create a buffer and save DataFrame as parquet
-        buffer = BytesIO()
-        df.to_parquet(buffer)
-        buffer.seek(0)
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        key = f'bronze/nyc_taxi/yellow_tripdata_{current_time}.parquet'
         
-        # Upload to S3
+        # Upload directly to S3
         s3_client = boto3.client('s3')
-        key = f'test/test_data_{datetime.now().strftime("%Y%m%d_%H%M%S")}.parquet'
-        
-        s3_client.upload_fileobj(buffer, bucket_name, key)
+        s3_client.upload_fileobj(response.raw, bucket_name, key)
         
         return {
             'statusCode': 200,
-            'body': json.dumps(f'Successfully created test file: {key}')
+            'body': json.dumps({
+                'message': f'Successfully uploaded file: {key}',
+                'destination': f's3://{bucket_name}/{key}'
+            })
         }
         
     except Exception as e:
         print(f"Error: {str(e)}")
         return {
             'statusCode': 500,
-            'body': json.dumps(f'Error: {str(e)}')
+            'body': json.dumps({
+                'error': str(e),
+                'message': 'Failed to process and upload NYC taxi data'
+            })
         }
