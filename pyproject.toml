@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "dataeng"
+version = "0.1.0"
+description = "Data Engineering in AWS"
+authors = ["BK"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10.11"
+boto3 = "^1.35.86"
+pandas = "^2.2.3"
+pyarrow = "^18.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
