@@ -21,3 +21,8 @@ variable "s3_bucket_tags" {
 #   description = "Database password"
 #   type        = string
 # }
+
+variable "email" {
+  description = "EmailAddress for SNS notification"
+  type        = string
+}

@@ -11,7 +11,8 @@ This project demonstrates how to build an event-driven ETL (Extract, Transform, 
 * `Data Lake` and `Warehouse` Integration: Organize data in S3 buckets and optionally load to Amazon Redshift for querying.
 
 * `Infrastructure as Code (IaC)`: Use Terraform to set up resources.
-Monitoring and Logging: Gain insights with CloudWatch, EventBridge, and SNS.
+
+* `Monitoring and Logging`: Gain insights with CloudWatch, EventBridge, and SNS.
 
 ### Data Source:
 
@@ -31,6 +32,15 @@ project-root/
 │   │
 │   │
 │   └── layers/
+├── tests/
+│   ├── code/
+│   │   ├── test_lambda_function.py
+│   │   ├── test_lambda_orchestrator.py
+│   │   ├── conftest.py
+│   ├── data/
+│   │
+│   │
+│   └── layers/
 │
 ├── scripts/
 │   ├── build_lambda.py
@@ -39,28 +49,36 @@ project-root/
 │
 ├── dist/                        # Generated files
 │   ├── lambda_function.zip
+│   ├── lambda_layer_requests.zip
 │
 └── pyproject.toml
 ```
 
 ### Start Project
 ```bash
+export PYTHONPATH=$PYTHONPATH:$PWD
 cd terraform
 terraform init
 
-python scripts/build_lambda.py --overwrite   # --overwrite, if any lambda functions are changed
-python scripts/build_lambda.py --layer requests requests
+python scripts/build_lambda.py # --overwrite, if need to overwrite       
+python scripts/build_lambda.py --layer requests
+
 
 terraform validate
 terraform plan
 terraform apply
-aws lambda invoke --function-name nytaxi_data_loader output.txt
+aws lambda invoke --function-name
+nytaxi_orchestrator output_orchestrator.txt
+
+
+# Run test cases
+pytest
 ```
 
 ### Progress Update
 
 The diagram will be updated to reflect the services and workflow as progress continues.
-![archdiagram](assests/DataEngArch.drawio.png)
+![archdiagram](assests/DataEngArch.png)
 
 ### Milestones
 
@@ -78,19 +96,19 @@ The diagram will be updated to reflect the services and workflow as progress con
 * ~~Extend the Lambda function to fetch sample NYC taxi data.~~
 * ~~Load the raw data into the bronze S3 bucket.~~
 
-**Orchestrate Workflow with Step Functions**
-* Use AWS Step Functions to manage the ETL pipeline workflow.
 
-**Ingest Raw NYC Taxi Data Secheduled Monthly**
+**~~Use Scheduele Even Buss to Ingest Raw NYC Taxi Data Monthly~~**
 
-* Load data to bronze s3 based monthly(nyc data updated monthly, )
+* ~~Load data to bronze s3 based monthly(nyc data updated monthly)~~
+
+*Enable Monitoring and Logging*
+* *Integrate AWS CloudWatch, EventBridge, and SNS for logging and notifications.*
 
 **Transform Data with AWS Glue**
 * Create an AWS Glue job to process raw data from the bronze bucket.
 * Load the processed data into the gold bucket.
 
-**Enable Monitoring and Logging**
-* Integrate AWS CloudWatch, EventBridge, and SNS for logging and notifications.
+
 
 **Enhance Security with Network Isolation**
 * Implement Amazon VPC for secure network configurations.
@@ -100,7 +118,7 @@ The diagram will be updated to reflect the services and workflow as progress con
 
 **Granular Testing(Optional)**
 
-**Implemnet CICD with github action(Optional)**
+**Implement CICD with github action(Optional)**
 
 # Getting Started
 

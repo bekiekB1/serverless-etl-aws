@@ -49,32 +49,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "bucket_lifecycle" {
 
 
 # ------------------------------
-# IAM Role for Lambda Execution
-# ------------------------------
-resource "aws_iam_role" "lambda_role" {
-  name = "nytaxi_lambda_admin_role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-resource "aws_iam_role_policy_attachment" "lambda_admin" {
-  role       = aws_iam_role.lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
-}
-
-
-
-# ------------------------------
 # Lambda Code and Configuration
 # ------------------------------
 resource "aws_s3_bucket" "lambda_code" {
@@ -100,13 +74,12 @@ resource "aws_s3_object" "lambda_code" {
   source = "../dist/lambda_function.zip"
   etag   = filemd5("../dist/lambda_function.zip")
 }
-
-
-# ----------------------------------------
-# Add custom lambda layer
-# ----------------------------------------
-
-# S3 object for Lambda layer
+resource "aws_s3_object" "orchestrator_code" {
+  bucket = aws_s3_bucket.lambda_code.id
+  key    = "lambda_orchestrator.zip"
+  source = "../dist/lambda_orchestrator.zip"
+  etag   = filemd5("../dist/lambda_orchestrator.zip")
+}
 resource "aws_s3_object" "requests_layer" {
   bucket = aws_s3_bucket.lambda_code.id
   key    = "lambda_layer_requests.zip"
@@ -114,12 +87,19 @@ resource "aws_s3_object" "requests_layer" {
   etag   = filemd5("../dist/lambda_layer_requests.zip")
 }
 
+
+
+# ----------------------------------------
+# Add custom lambda layer
+# ----------------------------------------
 resource "aws_lambda_layer_version" "requests_layer" {
   filename            = "../dist/lambda_layer_requests.zip"
   layer_name          = "requests_layer"
   description         = "Layer for requests"
   compatible_runtimes = ["python3.10"]
 }
+
+
 
 # ------------------------------
 # Lambda Function Definition
@@ -150,6 +130,156 @@ resource "aws_lambda_function" "nytaxi_loader" {
     }
   }
 }
+
+resource "aws_lambda_function" "nytaxi_orchestrator" {
+  function_name     = "nytaxi_orchestrator"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "lambda_orchestrator.lambda_handler"
+  runtime          = "python3.10"
+  timeout          = 60
+  memory_size      = 128
+  
+  s3_bucket        = aws_s3_bucket.lambda_code.id
+  s3_key           = aws_s3_object.orchestrator_code.key
+  source_code_hash = filebase64sha256("../dist/lambda_orchestrator.zip")
+  
+  environment {
+    variables = {
+      REGION       = var.region
+      PROCESSOR_FUNCTION_NAME = aws_lambda_function.nytaxi_loader.function_name
+      NOTIFICATION_TOPIC_ARN  = aws_sns_topic.processing_notifications.arn
+    }
+  }
+}
+
+# ----------------------------------
+# IAM Role and Policies for lambda
+# ---------------------------------
+resource "aws_iam_role" "lambda_role" {
+  name = "nytaxi_lambda_admin_role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_admin" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_logs" {
+  role       = aws_iam_role.lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_invoke_policy" {
+  name = "lambda_invoke_policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = [
+          aws_lambda_function.nytaxi_loader.arn
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sns:Publish"
+        ]
+        Resource = [
+          aws_sns_topic.processing_notifications.arn
+        ]
+      }
+    ]
+  })
+}
+
+
+
+# ------------------------------
+# EventBridge Rule
+# ------------------------------
+resource "aws_cloudwatch_event_rule" "monthly_trigger" {
+  name                = "nytaxi-monthly-trigger"
+  description         = "Triggers NYC Taxi data processing workflow monthly"
+  schedule_expression = "cron(0 0 1 * ? *)"  # Runs at midnight on the 1st of each month
+}
+
+resource "aws_cloudwatch_event_target" "lambda_target" {
+  rule      = aws_cloudwatch_event_rule.monthly_trigger.name
+  target_id = "TriggerNYTaxiOrchestrator"
+  arn       = aws_lambda_function.nytaxi_orchestrator.arn
+}
+
+# ------------------------------
+# Lambda Permission for EventBridge
+# ------------------------------
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.nytaxi_orchestrator.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.monthly_trigger.arn
+}
+
+# ------------------------------
+# SNS Topic for Notifications
+# ------------------------------
+resource "aws_sns_topic" "processing_notifications" {
+  name = "nytaxi-processing-notifications"
+}
+
+resource "aws_sns_topic_policy" "default" {
+  arn = aws_sns_topic.processing_notifications.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowLambdaToPublish"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.processing_notifications.arn
+      },
+      {
+        Sid    = "AllowLambdaRoleToPublish"
+        Effect = "Allow"
+        Principal = {
+          AWS = aws_iam_role.lambda_role.arn
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.processing_notifications.arn
+      }
+    ]
+  })
+}
+
+resource "aws_sns_topic_subscription" "email" {
+  topic_arn = aws_sns_topic.processing_notifications.arn
+  protocol  = "email"
+  endpoint  = var.email#"your-email@example.com"
+}
+
+
 
 
 # ----------------------------------------
