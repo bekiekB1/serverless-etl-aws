@@ -46,8 +46,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "bucket_lifecycle" {
   }
 }
 
-
-
 # ------------------------------
 # Lambda Code and Configuration
 # ------------------------------
@@ -68,6 +66,8 @@ resource "aws_s3_bucket_public_access_block" "lambda_code_public_access_block" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+
 resource "aws_s3_object" "lambda_code" {
   bucket = aws_s3_bucket.lambda_code.id
   key    = "lambda_function.zip"
@@ -132,20 +132,20 @@ resource "aws_lambda_function" "nytaxi_loader" {
 }
 
 resource "aws_lambda_function" "nytaxi_orchestrator" {
-  function_name     = "nytaxi_orchestrator"
-  role             = aws_iam_role.lambda_role.arn
-  handler          = "lambda_orchestrator.lambda_handler"
-  runtime          = "python3.10"
-  timeout          = 60
-  memory_size      = 128
-  
+  function_name = "nytaxi_orchestrator"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "lambda_orchestrator.lambda_handler"
+  runtime       = "python3.10"
+  timeout       = 60
+  memory_size   = 128
+
   s3_bucket        = aws_s3_bucket.lambda_code.id
   s3_key           = aws_s3_object.orchestrator_code.key
   source_code_hash = filebase64sha256("../dist/lambda_orchestrator.zip")
-  
+
   environment {
     variables = {
-      REGION       = var.region
+      REGION                  = var.region
       PROCESSOR_FUNCTION_NAME = aws_lambda_function.nytaxi_loader.function_name
       NOTIFICATION_TOPIC_ARN  = aws_sns_topic.processing_notifications.arn
     }
@@ -157,7 +157,7 @@ resource "aws_lambda_function" "nytaxi_orchestrator" {
 # ---------------------------------
 resource "aws_iam_role" "lambda_role" {
   name = "nytaxi_lambda_admin_role"
-  
+
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -219,7 +219,7 @@ resource "aws_iam_role_policy" "lambda_invoke_policy" {
 resource "aws_cloudwatch_event_rule" "monthly_trigger" {
   name                = "nytaxi-monthly-trigger"
   description         = "Triggers NYC Taxi data processing workflow monthly"
-  schedule_expression = "cron(0 0 1 * ? *)"  # Runs at midnight on the 1st of each month
+  schedule_expression = "cron(0 0 1 * ? *)" # Runs at midnight on the 1st of each month
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
@@ -276,7 +276,318 @@ resource "aws_sns_topic_policy" "default" {
 resource "aws_sns_topic_subscription" "email" {
   topic_arn = aws_sns_topic.processing_notifications.arn
   protocol  = "email"
-  endpoint  = var.email#"your-email@example.com"
+  endpoint  = var.email #"your-email@example.com"
+}
+
+# ------------------------------
+# S3 Silver and gold Bucket
+# ------------------------------
+resource "aws_s3_bucket" "silver_bucket" {
+  bucket = "${var.s3bronze_nyctaxi}-silver"
+  tags   = var.s3_bucket_tags
+}
+
+resource "aws_s3_bucket" "gold_bucket" {
+  bucket = "${var.s3bronze_nyctaxi}-gold"
+  tags   = var.s3_bucket_tags
+}
+
+resource "aws_s3_bucket_versioning" "silver_versioning" {
+  bucket = aws_s3_bucket.silver_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "gold_versioning" {
+  bucket = aws_s3_bucket.gold_bucket.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+
+# ----------------------------------
+# IAM Role and Policies for glue
+# ---------------------------------
+resource "aws_iam_role" "glue_role" {
+  name = "nytaxi_glue_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "glue.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "glue_service" {
+  role       = aws_iam_role.glue_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole"
+}
+
+# Custom policy for S3 access
+resource "aws_iam_role_policy" "glue_s3_access" {
+  name = "glue_s3_access"
+  role = aws_iam_role.glue_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Resource = [
+          aws_s3_bucket.my_bucket.arn,
+          "${aws_s3_bucket.my_bucket.arn}/*",
+          "${aws_s3_bucket.my_bucket.arn}/nyc_taxi/*",
+          aws_s3_bucket.silver_bucket.arn,
+          "${aws_s3_bucket.silver_bucket.arn}/*",
+          aws_s3_bucket.gold_bucket.arn,
+          "${aws_s3_bucket.gold_bucket.arn}/*",
+          aws_s3_bucket.lambda_code.arn,
+          "${aws_s3_bucket.lambda_code.arn}/*",
+        ]
+      }
+    ]
+  })
+}
+
+# ------------------------------
+# AWS Glue Crawler
+# ------------------------------
+# resource "aws_glue_crawler" "bronze_crawler" {
+#   database_name = aws_glue_catalog_database.nytaxi.name
+#   name          = "nytaxi_bronze_crawler"
+#   role          = aws_iam_role.glue_role.arn
+
+#   s3_target {
+#     path = "s3://${aws_s3_bucket.bronze.id}/nyc_taxi/"
+#   }
+
+#   schedule = "cron(0 1 1 * ? *)"
+# }
+
+
+
+# ----------------------------------
+# Brozone to Silver Jobs and Logs
+# ---------------------------------
+resource "aws_s3_object" "bronze_to_silver_script" {
+  bucket = aws_s3_bucket.lambda_code.id
+  key    = "bronze_to_silver.py"
+  source = "../src/glue_scripts/bronze_to_silver.py"
+  etag   = filemd5("../src/glue_scripts/bronze_to_silver.py")
+}
+
+resource "aws_glue_job" "bronze_to_silver" {
+  name              = "nytaxi_bronze_to_silver"
+  role_arn          = aws_iam_role.glue_role.arn
+  glue_version      = "4.0"
+  worker_type       = "G.1X"
+  number_of_workers = 2
+
+  command {
+    script_location = "s3://${aws_s3_bucket.lambda_code.id}/bronze_to_silver.py"
+    python_version  = "3"
+  }
+
+  default_arguments = {
+    "--job-language"                     = "python"
+    "--continuous-log-logGroup"          = "/aws-glue/jobs/bronze_to_silver"
+    "--enable-continuous-cloudwatch-log" = "true"
+    "--enable-metrics"                   = "true"
+    "--source_bucket"                    = aws_s3_bucket.my_bucket.id
+    "--target_bucket"                    = aws_s3_bucket.silver_bucket.id
+  }
+}
+resource "aws_cloudwatch_log_group" "bronze_to_silver_logs" {
+  name              = "/aws-glue/jobs/bronze_to_silver"
+  retention_in_days = 30
+}
+
+
+# ----------------------------------
+# EventBridge rule to watch S3 events
+# ---------------------------------
+resource "aws_cloudwatch_event_rule" "s3_trigger" {
+  name        = "detect-new-taxi-data"
+  description = "Detect new data in raw folder"
+  
+  event_pattern = jsonencode({
+    source      = ["aws.s3"]
+    detail-type = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["s3.amazonaws.com"]
+      eventName   = ["PutObject", "CompleteMultipartUpload"]
+      requestParameters = {
+        bucketName = [aws_s3_bucket.my_bucket.id]
+      }
+      resources = {
+        ARN = ["${aws_s3_bucket.my_bucket.arn}/nyc_taxi/*"]
+      }
+    }
+  })
+}
+
+resource "aws_s3_bucket" "cloudtrail" {
+  bucket = "${var.s3bronze_nyctaxi}-cloudtrail"
+}
+
+resource "aws_s3_bucket_policy" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AWSCloudTrailAclCheck"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.cloudtrail.arn
+      },
+      {
+        Sid    = "AWSCloudTrailWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.cloudtrail.arn}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
+}
+# Update CloudTrail configuration
+resource "aws_cloudtrail" "s3_trail" {
+  name                          = "s3-event-trail"
+  s3_bucket_name               = aws_s3_bucket.cloudtrail.id
+  include_global_service_events = false
+  
+  event_selector {
+    read_write_type           = "WriteOnly"
+    include_management_events = true
+    
+    data_resource {
+      type   = "AWS::S3::Object"
+      values = ["${aws_s3_bucket.my_bucket.arn}/nyc_taxi/"]
+    }
+  }
+}
+
+# ----------------------------------
+# Glue Workflow
+# ---------------------------------
+# Target to start Glue workflow
+
+
+resource "aws_glue_workflow" "nytaxi_workflow" {
+  name = "nytaxi_etl_workflow"
+}
+resource "aws_glue_trigger" "start_workflow" {
+  name          = "start_bronze_to_silver"
+  type          = "EVENT"
+  workflow_name = aws_glue_workflow.nytaxi_workflow.name
+  
+  event_batching_condition {
+    batch_size = 1
+    batch_window = 900
+  }
+  
+  actions {
+    job_name = aws_glue_job.bronze_to_silver.name
+    arguments = {
+      "--source_path" = "s3://${aws_s3_bucket.my_bucket.id}/nyc_taxi/"
+      "--target_path" = "s3://${aws_s3_bucket.silver_bucket.id}/nyc_taxi/"
+    }
+  }
+}
+
+resource "aws_cloudwatch_event_target" "trigger_glue_workflow" {
+  rule      = aws_cloudwatch_event_rule.s3_trigger.name
+  target_id = "TriggerGlueWorkflow"
+  arn       = aws_glue_workflow.nytaxi_workflow.arn
+  role_arn  = aws_iam_role.eventbridge_glue_role.arn
+}
+
+# IAM Role for EventBridge to Trigger Glue Workflow
+resource "aws_iam_role" "eventbridge_glue_role" {
+  name = "eventbridge_glue_role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_policy" "eventbridge_glue_policy" {
+  name        = "eventbridge_glue_policy"
+  description = "Policy for EventBridge to invoke Glue workflows"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = "glue:StartWorkflowRun"
+        Resource = aws_glue_workflow.nytaxi_workflow.arn
+      }
+    ]
+  })
+}
+#data "aws_caller_identity" "current" {}
+
+
+resource "aws_iam_role_policy_attachment" "attach_eventbridge_policy" {
+  role       = aws_iam_role.eventbridge_glue_role.name
+  policy_arn = aws_iam_policy.eventbridge_glue_policy.arn
+}
+# ----------------------------------
+# Notification for Glue Jobs
+# ---------------------------------
+resource "aws_sns_topic_policy" "glue_notifications" {
+  arn = aws_sns_topic.processing_notifications.arn
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowGlueToPublish"
+        Effect = "Allow"
+        Principal = {
+          Service = "glue.amazonaws.com"
+        }
+        Action   = "SNS:Publish"
+        Resource = aws_sns_topic.processing_notifications.arn
+      }
+    ]
+  })
 }
 
 
