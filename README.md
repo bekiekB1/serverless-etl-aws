@@ -67,8 +67,7 @@ python scripts/build_lambda.py --layer requests
 terraform validate
 terraform plan
 terraform apply
-aws lambda invoke --function-name
-nytaxi_orchestrator output_orchestrator.txt
+aws lambda invoke --function-name nytaxi_orchestrator output_orchestrator.txt
 
 
 # Run test cases

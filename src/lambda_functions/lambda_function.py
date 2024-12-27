@@ -20,7 +20,7 @@ def download_and_upload_to_s3(url: str, bucket: str, year_month: str) -> str:
         
         # Generate S3 key
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        key = f'bronze/nyc_taxi/yellow_taxi_{year_month}_{timestamp}.parquet'
+        key = f'nyc_taxi/yellow_taxi_{year_month}_{timestamp}.parquet'
         
         # Upload to S3 using the streaming response
         s3_client = boto3.client('s3')
