@@ -377,7 +377,7 @@ resource "aws_s3_object" "bronze_to_silver_script" {
 resource "aws_glue_job" "bronze_to_silver" {
   name              = "nytaxi_bronze_to_silver"
   role_arn          = aws_iam_role.glue_role.arn
-  glue_version      = "4.0"
+  glue_version      = "5.0"
   worker_type       = "G.1X"
   number_of_workers = 2
 
@@ -478,7 +478,7 @@ resource "aws_iam_role" "eventbridge_glue_role" {
 resource "aws_iam_policy" "eventbridge_glue_policy" {
   name        = "eventbridge_glue_policy"
   description = "Policy for EventBridge to invoke Glue workflows"
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
