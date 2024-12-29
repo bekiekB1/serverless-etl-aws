@@ -60,15 +60,17 @@ if __name__ == "__main__":
     parser.add_argument("--python-version", default="3.10", help="Specify the Python version for the layer (default: 3.10).")
     parser.add_argument("--platform", default="manylinux2014_x86_64", help="Specify the platform for the layer (default: manylinux2014_x86_64).")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing Lambda zip files.")
-    parser.add_argument("--lambda_func", choices=["function", "orchestrator", "both"], default="both",
-                        help="Specify which Lambda package to create: function, orchestrator, or both.")
+    parser.add_argument("--lambda_func", choices=["function", "orchestrator" ,"s3_operations", "all"], default="all",
+                        help="Specify which Lambda package to create: function, orchestrator,s3_operations or all.")
     args = parser.parse_args()
 
     if args.layer:
         package = args.layer
         create_single_layer_package(package, python_version=args.python_version, platform=args.platform)
     else:
-        if args.lambda_func in ["function", "both"]:
-            create_lambda_package("src/lambda_functions/lambda_function.py", "lambda_function", overwrite=args.overwrite)
-        if args.lambda_func in ["orchestrator", "both"]:
-            create_lambda_package("src/lambda_functions/lambda_orchestrator.py", "lambda_orchestrator", overwrite=args.overwrite)
+        if args.lambda_func in ["function", "all"]:
+            create_lambda_package("src/lambda_functions/data_downloader.py", "data_downloader", overwrite=args.overwrite)
+        if args.lambda_func in ["orchestrator", "all"]:
+            create_lambda_package("src/lambda_functions/fetch_raw_data.py", "fetch_raw_data", overwrite=args.overwrite)
+        if args.lambda_func in ["s3_operations", "all"]:
+            create_lambda_package("src/lambda_functions/s3_operations.py", "s3_operations", overwrite=args.overwrite)

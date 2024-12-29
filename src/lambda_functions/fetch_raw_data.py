@@ -7,13 +7,15 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+ROOT_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
+
 def get_monthly_url():
     """Generate URL for the previous month's taxi data"""
     current_date = datetime.now()
     first_of_month = current_date.replace(day=1)
     last_month = first_of_month - timedelta(days=1)
     year_month = last_month.strftime("%Y-%m")
-    return f"https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{year_month}.parquet"
+    return f"{ROOT_URL}yellow_tripdata_{year_month}.parquet"
 
 def notify(subject, message):
     """Send notification via SNS"""
@@ -31,17 +33,14 @@ def notify(subject, message):
 
 def lambda_handler(event, context):
     try:
-        # Get the URL for the current month's data
         url = get_monthly_url()
         logger.info(f"Generated URL: {url}")
         
-        # Prepare the payload for the processor Lambda
         payload = {
             'url': url,
             'year_month': datetime.now().strftime("%Y-%m")
         }
         
-        # Invoke the processor Lambda
         lambda_client = boto3.client('lambda')
         processor_response = lambda_client.invoke(
             FunctionName=os.environ['PROCESSOR_FUNCTION_NAME'],
@@ -49,11 +48,9 @@ def lambda_handler(event, context):
             Payload=json.dumps(payload)
         )
         
-        # Parse the response
         response_payload = json.loads(processor_response['Payload'].read())
         logger.info(f"Processor response: {response_payload}")
-        
-        # Check if processing was successful
+    
         if processor_response['StatusCode'] == 200 and response_payload.get('statusCode') == 200:
             message = f"Successfully processed NYC taxi data for {payload['year_month']}"
             notify("NYC Taxi Data Processing Success", message)

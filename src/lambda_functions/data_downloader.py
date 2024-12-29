@@ -8,21 +8,26 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def download_and_upload_to_s3(url: str, bucket: str, year_month: str) -> str:
-    """
-    Download data from URL and directly upload to S3
+    """Donwload the Data from url and upload to the bronze nyc bucket
+
+    Args:
+        url (str): url to download data from
+        bucket (str): destination bronze bucket name
+        year_month (str): processing month for raw data
+                          (Nyc data update monthly Jan1, dec month data is available)
+
+    Returns:
+        str: final s3 uri(include file path in the bucket) 
     """
     try:
         logger.info(f"Downloading data from: {url}")
-        
-        # Stream the download
+
         response = requests.get(url, stream=True)
         response.raise_for_status()
         
-        # Generate S3 key
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         key = f'nyc_taxi/yellow_taxi_{year_month}_{timestamp}.parquet'
         
-        # Upload to S3 using the streaming response
         s3_client = boto3.client('s3')
         s3_client.upload_fileobj(response.raw, bucket, key)
         
@@ -34,21 +39,27 @@ def download_and_upload_to_s3(url: str, bucket: str, year_month: str) -> str:
         raise
 
 def lambda_handler(event, context):
-    """
-    Main Lambda handler
+    """_summary_
+
+    Args:
+        event (_type_): _description_
+        context (_type_): _description_
+
+    Raises:
+        ValueError: _description_
+
+    Returns:
+        _type_: _description_
     """
     try:
-        # Get environment variables
         bucket_name = os.environ['BUCKET_NAME']
         
-        # Get URL and year_month from event
         url = event.get('url')
         year_month = event.get('year_month')
         
         if not url or not year_month:
             raise ValueError("Missing required parameters: 'url' or 'year_month'")
             
-        # Download and upload to S3
         s3_key = download_and_upload_to_s3(url, bucket_name, year_month)
         
         return {
