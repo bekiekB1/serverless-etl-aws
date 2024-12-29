@@ -1,14 +1,19 @@
 site_name: Severless ETL
 nav:
   - Home: index.md
-  - serverlessETL:
-    - bronze_to_silver: src/glue_scripts/bronze_to_silver.md
+  - LambdaFunctions:
     - data_downloader: src/lambda_functions/data_downloader.md
     - fetch_raw_data: src/lambda_functions/fetch_raw_data.md
     - s3_operations: src/lambda_functions/s3_operations.md
-    - build_lambda: src/build_lambda.md
+  - GlueScripts:
+    - bronze_to_silver: src/glue_scripts/bronze_to_silver.md
+  - build_lambda: src/build_lambda.md
 
-theme: readthedocs
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.expand
 plugins:
   - mkdocstrings
 watch:

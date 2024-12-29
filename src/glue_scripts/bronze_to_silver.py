@@ -14,9 +14,11 @@ from pyspark.sql.functions import *
 
 def invoke_lambda(function_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Invoke Lambda function with payload
+
     Args:
         function_name (str): name/ARN of Lambda function to invoke
         payload (dict): data to pass to Lambda function
+
     Returns:
         dict: Lambda function response
     """
@@ -27,10 +29,12 @@ def invoke_lambda(function_name: str, payload: Dict[str, Any]) -> Dict[str, Any]
 
 def process_taxi_data(spark, source_bucket: str, files_to_process: List[str]) -> Optional[DataFrame]:
     """Process raw taxi data files into silver format
+
     Args:
         spark (SparkSession): active Spark session
         source_bucket (str): source S3 bucket containing raw files
         files_to_process (list): list of files to process
+
     Returns:
         DataFrame: processed Spark DataFrame or None if no files
     """
@@ -45,10 +49,13 @@ def process_taxi_data(spark, source_bucket: str, files_to_process: List[str]) ->
 
 def main() -> None:
     """Main Glue job function for bronze to silver transformation
+
     Args:
         None: reads job parameters from Glue context
+
     Returns:
         None: writes processed data to silver zone
+
     Raises:
         Exception: if processing fails
     """

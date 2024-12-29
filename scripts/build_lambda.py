@@ -7,10 +7,12 @@ import sys
 
 def create_single_layer_package(package_name: str, python_version: str = "3.10", platform: str = "manylinux2014_x86_64") -> None:
     """Create a single package Lambda layer with specified dependencies
+
     Args:
         package_name (str): name of the Python package to include in layer
         python_version (str): target Python version (default: 3.10)
         platform (str): target platform (default: manylinux2014_x86_64)
+
     Returns:
         None: creates zip file in dist directory
     """
@@ -54,10 +56,12 @@ def create_single_layer_package(package_name: str, python_version: str = "3.10",
 
 def create_lambda_package(source_file: str, zip_name: str, overwrite: bool = False) -> None:
     """Package Lambda function source into deployment zip
+
     Args:
         source_file (str): path to Lambda function source file
         zip_name (str): name for output zip file (without extension)
         overwrite (bool): whether to overwrite existing zip (default: False)
+
     Returns:
         None: creates zip file in dist directory
     """

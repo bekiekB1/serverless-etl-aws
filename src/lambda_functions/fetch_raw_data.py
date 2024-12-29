@@ -13,8 +13,10 @@ ROOT_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
 
 def get_monthly_url() -> str:
     """Generate URL for previous month's NYC taxi data
+
     Args:
         None
+
     Returns:
         str: URL for downloading previous month's taxi data
     """
@@ -27,9 +29,11 @@ def get_monthly_url() -> str:
 
 def notify(subject: str, message: str) -> None:
     """Send SNS notification about processing status
+
     Args:
         subject (str): notification subject line
         message (str): detailed notification message
+
     Returns:
         None: sends SNS notification if topic ARN configured
     """
@@ -44,9 +48,11 @@ def notify(subject: str, message: str) -> None:
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Union[int, str]]:
     """Orchestrate fetching of new NYC taxi data
+
     Args:
         event (dict): Lambda event trigger
         context (object): Lambda context object
+
     Returns:
         dict: processing status and results
             statusCode (int): HTTP status code

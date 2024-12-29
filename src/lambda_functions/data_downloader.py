@@ -12,11 +12,13 @@ logger.setLevel(logging.INFO)
 
 def download_and_upload_to_s3(url: str, bucket: str, year_month: str) -> str:
     """Download the Data from url and upload to the bronze nyc bucket
+
     Args:
         url (str): url to download data from
         bucket (str): destination bronze bucket name
         year_month (str): processing month for raw data
         (Nyc data update monthly Jan1, dec month data is available)
+
     Returns:
         str: final s3 uri(include file path in the bucket)
     """
@@ -42,9 +44,11 @@ def download_and_upload_to_s3(url: str, bucket: str, year_month: str) -> str:
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Union[int, Dict[str, Any]]]:
     """Handle Lambda invocation for NYC taxi data downloads
+
     Args:
         event (dict): Lambda event containing url and year_month
         context (object): Lambda context object
+
     Returns:
         dict: response with status code and processing results
             statusCode (int): HTTP status code

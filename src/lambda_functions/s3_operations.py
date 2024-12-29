@@ -1,6 +1,6 @@
 import json
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import boto3
 
@@ -12,9 +12,11 @@ class S3FileProcessor:
 
     def get_unprocessed_files(self, bucket: str, prefix: str) -> List[str]:
         """Retrieve list of unprocessed files from S3 bucket
+
         Args:
             bucket (str): source S3 bucket name
             prefix (str): S3 prefix to filter files
+
         Returns:
             list: list of unprocessed file keys
         """
@@ -37,11 +39,13 @@ class S3FileProcessor:
 
     def mark_as_processed(self, bucket: str, key: str, status: str = "Processed", error: Optional[str] = None) -> None:
         """Mark S3 file with processing status via tags
+
         Args:
             bucket (str): S3 bucket name
             key (str): S3 object key
             status (str): processing status tag value (default: Processed)
             error (str): error message if processing failed (default: None)
+
         Returns:
             None: updates S3 object tags
         """
@@ -53,9 +57,11 @@ class S3FileProcessor:
 
     def archive_file(self, bucket: str, key: str) -> None:
         """Move processed file to archive location
+
         Args:
             bucket (str): S3 bucket name
             key (str): S3 object key to archive
+
         Returns:
             None: moves file to archive prefix
         """
@@ -68,6 +74,7 @@ class S3FileProcessor:
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Union[int, Union[str, Dict[str, List[str]]]]]:
     """Handle S3 file processing operations
+
     Args:
         event (dict): Lambda event with action and file details
             action (str): operation to perform (get_unprocessed/mark_processed/archive)
@@ -75,6 +82,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Union[int, 
             key (str): S3 object key (for mark_processed/archive)
             prefix (str): S3 prefix (for get_unprocessed)
         context (object): Lambda context object
+
     Returns:
         dict: operation results
             statusCode (int): HTTP status code
