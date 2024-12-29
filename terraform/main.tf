@@ -77,18 +77,18 @@ resource "aws_s3_bucket_public_access_block" "lambda_code_public_access_block" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_object" "lambda_code" {
+resource "aws_s3_object" "data_downloader" {
   bucket = aws_s3_bucket.lambda_code.id
-  key    = "lambda_function.zip"
-  source = "../dist/lambda_function.zip"
-  etag   = filemd5("../dist/lambda_function.zip")
+  key    = "data_downloader.zip"
+  source = "../dist/data_downloader.zip"
+  etag   = filemd5("../dist/data_downloader.zip")
 }
 
-resource "aws_s3_object" "orchestrator_code" {
+resource "aws_s3_object" "fetch_raw_data" {
   bucket = aws_s3_bucket.lambda_code.id
-  key    = "lambda_orchestrator.zip"
-  source = "../dist/lambda_orchestrator.zip"
-  etag   = filemd5("../dist/lambda_orchestrator.zip")
+  key    = "fetch_raw_data.zip"
+  source = "../dist/fetch_raw_data.zip"
+  etag   = filemd5("../dist/fetch_raw_data.zip")
 }
 
 resource "aws_s3_object" "requests_layer" {
@@ -98,6 +98,12 @@ resource "aws_s3_object" "requests_layer" {
   etag   = filemd5("../dist/lambda_layer_requests.zip")
 }
 
+resource "aws_s3_object" "s3_operations" {
+  bucket = aws_s3_bucket.lambda_code.id
+  key    = "s3_operations.zip"
+  source = "../dist/s3_operations.zip"
+  etag   = filemd5("../dist/s3_operations.zip")
+}
 # ----------------------------------------
 # Add custom lambda layer
 # ----------------------------------------
@@ -111,17 +117,17 @@ resource "aws_lambda_layer_version" "requests_layer" {
 # ------------------------------
 # Lambda Function Definition
 # ------------------------------
-resource "aws_lambda_function" "nytaxi_loader" {
-  function_name = "nytaxi_data_loader"
+resource "aws_lambda_function" "nytaxi_data_downloader" {
+  function_name = "nytaxi_data_downloader"
   role          = aws_iam_role.lambda_role.arn
-  handler       = "lambda_function.lambda_handler"
+  handler       = "data_downloader.lambda_handler"
   runtime       = "python3.10"
   timeout       = 300
   memory_size   = 1024
 
-  s3_bucket        = aws_s3_bucket.lambda_code.id
-  s3_key           = aws_s3_object.lambda_code.key
-  source_code_hash = filebase64sha256("../dist/lambda_function.zip")
+  s3_bucket        = aws_s3_bucket.lambda_code.bucket
+  s3_key           = aws_s3_object.data_downloader.key
+  source_code_hash = filebase64sha256("../dist/data_downloader.zip")
 
   layers = [
     aws_lambda_layer_version.requests_layer.arn
@@ -135,22 +141,42 @@ resource "aws_lambda_function" "nytaxi_loader" {
   }
 }
 
-resource "aws_lambda_function" "nytaxi_orchestrator" {
-  function_name = "nytaxi_orchestrator"
+resource "aws_lambda_function" "nytaxi_fetch_raw_data" {
+  function_name = "nytaxi_fetch_raw_data"
   role          = aws_iam_role.lambda_role.arn
-  handler       = "lambda_orchestrator.lambda_handler"
+  handler       = "fetch_raw_data.lambda_handler"
   runtime       = "python3.10"
   timeout       = 60
   memory_size   = 128
 
   s3_bucket        = aws_s3_bucket.lambda_code.id
-  s3_key           = aws_s3_object.orchestrator_code.key
-  source_code_hash = filebase64sha256("../dist/lambda_orchestrator.zip")
+  s3_key           = aws_s3_object.fetch_raw_data.key
+  source_code_hash = filebase64sha256("../dist/fetch_raw_data.zip")
 
   environment {
     variables = {
       REGION                  = var.region
-      PROCESSOR_FUNCTION_NAME = aws_lambda_function.nytaxi_loader.function_name
+      PROCESSOR_FUNCTION_NAME = aws_lambda_function.nytaxi_data_downloader.function_name
+      NOTIFICATION_TOPIC_ARN  = aws_sns_topic.processing_notifications.arn
+    }
+  }
+}
+
+resource "aws_lambda_function" "s3_operations" {
+  function_name = "s3_operations"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "s3_operations.lambda_handler"
+  runtime       = "python3.10"
+  timeout       = 60
+  memory_size   = 128
+
+  s3_bucket        = aws_s3_bucket.lambda_code.id
+  s3_key           = aws_s3_object.s3_operations.key
+  source_code_hash = filebase64sha256("../dist/s3_operations.zip")
+
+  environment {
+    variables = {
+      REGION                  = var.region
       NOTIFICATION_TOPIC_ARN  = aws_sns_topic.processing_notifications.arn
     }
   }
@@ -199,7 +225,7 @@ resource "aws_iam_role_policy" "lambda_invoke_policy" {
           "lambda:InvokeFunction"
         ]
         Resource = [
-          aws_lambda_function.nytaxi_loader.arn
+          aws_lambda_function.nytaxi_data_downloader.arn
         ]
       },
       {
@@ -227,7 +253,7 @@ resource "aws_cloudwatch_event_rule" "monthly_trigger" {
 resource "aws_cloudwatch_event_target" "lambda_target" {
   rule      = aws_cloudwatch_event_rule.monthly_trigger.name
   target_id = "TriggerNYTaxiOrchestrator"
-  arn       = aws_lambda_function.nytaxi_orchestrator.arn
+  arn       = aws_lambda_function.nytaxi_fetch_raw_data.arn
 }
 
 # ------------------------------
@@ -236,7 +262,7 @@ resource "aws_cloudwatch_event_target" "lambda_target" {
 resource "aws_lambda_permission" "allow_eventbridge" {
   statement_id  = "AllowEventBridgeInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.nytaxi_orchestrator.function_name
+  function_name = aws_lambda_function.nytaxi_fetch_raw_data.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.monthly_trigger.arn
 }
@@ -364,6 +390,52 @@ resource "aws_iam_role_policy" "glue_s3_access" {
   })
 }
 
+resource "aws_iam_role_policy" "glue_lambda_access" {
+  name = "glue_lambda_access"
+  role = aws_iam_role.glue_role.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction",
+          "lambda:GetFunction"
+        ]
+        Resource = [
+          aws_lambda_function.s3_operations.arn,
+          "${aws_lambda_function.s3_operations.arn}:*"  # For function versions and aliases
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "glue_cloudwatch_access" {
+  name = "glue_cloudwatch_access"
+  role = aws_iam_role.glue_role.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = [
+          "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/*:*"
+        ]
+      }
+    ]
+  })
+}
+
+# Add at the top of your Terraform configuration file
+data "aws_caller_identity" "current" {}
 # ----------------------------------
 # Brozone to Silver Jobs and Logs
 # ---------------------------------
@@ -393,6 +465,7 @@ resource "aws_glue_job" "bronze_to_silver" {
     "--enable-metrics"                   = "true"
     "--source_bucket"                    = aws_s3_bucket.my_bucket.id
     "--target_bucket"                    = aws_s3_bucket.silver_bucket.id
+    "--lambda_function_name"                    = aws_lambda_function.s3_operations.function_name
   }
 }
 
