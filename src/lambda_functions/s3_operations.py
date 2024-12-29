@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from typing import List, Optional
 
 import boto3
 
@@ -9,8 +10,14 @@ class S3FileProcessor:
         self.s3 = boto3.client("s3")
         self.cloudwatch = boto3.client("cloudwatch")
 
-    def get_unprocessed_files(self, bucket, prefix):
-        """Get list of unprocessed files"""
+    def get_unprocessed_files(self, bucket: str, prefix: str) -> List[str]:
+        """Retrieve list of unprocessed files from S3 bucket
+        Args:
+            bucket (str): source S3 bucket name
+            prefix (str): S3 prefix to filter files
+        Returns:
+            list: list of unprocessed file keys
+        """
         unprocessed_files = []
 
         paginator = self.s3.get_paginator("list_objects_v2")
@@ -28,16 +35,30 @@ class S3FileProcessor:
 
         return unprocessed_files
 
-    def mark_as_processed(self, bucket, key, status="Processed", error=None):
-        """Mark file with processing status"""
+    def mark_as_processed(self, bucket: str, key: str, status: str = "Processed", error: Optional[str] = None) -> None:
+        """Mark S3 file with processing status via tags
+        Args:
+            bucket (str): S3 bucket name
+            key (str): S3 object key
+            status (str): processing status tag value (default: Processed)
+            error (str): error message if processing failed (default: None)
+        Returns:
+            None: updates S3 object tags
+        """
         tags = [{"Key": "ProcessingStatus", "Value": status}, {"Key": "ProcessedDate", "Value": datetime.now().isoformat()}]
         if error:
             tags.append({"Key": "Error", "Value": str(error)[:250]})
 
         self.s3.put_object_tagging(Bucket=bucket, Key=key, Tagging={"TagSet": tags})
 
-    def archive_file(self, bucket, key):
-        """Move file to archive with date partitioning"""
+    def archive_file(self, bucket: str, key: str) -> None:
+        """Move processed file to archive location
+        Args:
+            bucket (str): S3 bucket name
+            key (str): S3 object key to archive
+        Returns:
+            None: moves file to archive prefix
+        """
         date_prefix = datetime.now().strftime("%Y/%m/%d")
         archive_key = f"archive/{date_prefix}/{key.split('/')[-1]}"
 
@@ -45,7 +66,20 @@ class S3FileProcessor:
         self.s3.delete_object(Bucket=bucket, Key=key)
 
 
-def lambda_handler(event, context):
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Union[int, Union[str, Dict[str, List[str]]]]]:
+    """Handle S3 file processing operations
+    Args:
+        event (dict): Lambda event with action and file details
+            action (str): operation to perform (get_unprocessed/mark_processed/archive)
+            bucket (str): S3 bucket name
+            key (str): S3 object key (for mark_processed/archive)
+            prefix (str): S3 prefix (for get_unprocessed)
+        context (object): Lambda context object
+    Returns:
+        dict: operation results
+            statusCode (int): HTTP status code
+            body (str/dict): operation results or error message
+    """
     processor = S3FileProcessor()
 
     action = event["action"]

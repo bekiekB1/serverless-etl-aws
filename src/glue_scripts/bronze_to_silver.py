@@ -1,24 +1,39 @@
 import json
 import sys
+from typing import Any, Dict, List, Optional
 
 import boto3
 from awsglue.context import GlueContext
 from awsglue.job import Job
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
+from pandas import DataFrame
 from pyspark.context import SparkContext
 from pyspark.sql.functions import *
 
 
-def invoke_lambda(function_name, payload):
-    """Invoke Lambda function and return response"""
+def invoke_lambda(function_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Invoke Lambda function with payload
+    Args:
+        function_name (str): name/ARN of Lambda function to invoke
+        payload (dict): data to pass to Lambda function
+    Returns:
+        dict: Lambda function response
+    """
     lambda_client = boto3.client("lambda")
     response = lambda_client.invoke(FunctionName=function_name, InvocationType="RequestResponse", Payload=json.dumps(payload))
     return json.loads(response["Payload"].read())
 
 
-def process_taxi_data(spark, source_bucket, files_to_process):
-    """Process specific taxi files"""
+def process_taxi_data(spark, source_bucket: str, files_to_process: List[str]) -> Optional[DataFrame]:
+    """Process raw taxi data files into silver format
+    Args:
+        spark (SparkSession): active Spark session
+        source_bucket (str): source S3 bucket containing raw files
+        files_to_process (list): list of files to process
+    Returns:
+        DataFrame: processed Spark DataFrame or None if no files
+    """
     if not files_to_process:
         return None
 
@@ -28,7 +43,15 @@ def process_taxi_data(spark, source_bucket, files_to_process):
     return df
 
 
-def main():
+def main() -> None:
+    """Main Glue job function for bronze to silver transformation
+    Args:
+        None: reads job parameters from Glue context
+    Returns:
+        None: writes processed data to silver zone
+    Raises:
+        Exception: if processing fails
+    """
     args = getResolvedOptions(sys.argv, ["JOB_NAME", "source_bucket", "target_bucket", "lambda_function_name"])
 
     sc = SparkContext()
