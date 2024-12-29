@@ -32,8 +32,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mkdocs mkdocstrings-python pytest pytest-cov
-
+          pip install mkdocs mkdocstrings-python pytest pytest-cov black flake8 isort
+          
       - name: Run tests
         run: |
           make test
