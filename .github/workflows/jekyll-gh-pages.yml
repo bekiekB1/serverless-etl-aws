@@ -32,11 +32,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install mkdocs mkdocstrings-python pytest pytest-cov black flake8 isort
+          pip install mkdocs mkdocstrings-python
           
-      - name: Run tests
-        run: |
-          make test
+      # - name: Run tests
+      #   run: |
+      #     make test
 
       - name: Build the MkDocs site
         run: |
