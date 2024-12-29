@@ -28,21 +28,24 @@
 # def mock_s3():
 #     return MagicMock()
 
+import boto3
+
 # @pytest.fixture(autouse=True)
 # def setup_logging():
 #     logger = logging.getLogger()
 #     logger.setLevel(logging.INFO)
 #     return logger
 import pytest
-import boto3
 from moto import mock_aws
 
-@pytest.fixture(scope='function')
+
+@pytest.fixture(scope="function")
 def aws_credentials():
     """Mocked AWS Credentials for moto."""
     import os
-    os.environ['AWS_ACCESS_KEY_ID'] = 'testing'
-    os.environ['AWS_SECRET_ACCESS_KEY'] = 'testing'
-    os.environ['AWS_SECURITY_TOKEN'] = 'testing'
-    os.environ['AWS_SESSION_TOKEN'] = 'testing'
-    os.environ['AWS_DEFAULT_REGION'] = 'us-east-2'
+
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-2"
