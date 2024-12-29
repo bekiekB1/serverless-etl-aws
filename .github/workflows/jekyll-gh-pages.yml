@@ -32,7 +32,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r mkdocs mkdocstrings-python
+          pip install mkdocs mkdocstrings-python
 
       - name: Build the MkDocs site
         run: |
