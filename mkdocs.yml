@@ -8,13 +8,12 @@ nav:
   - GlueScripts:
     - bronze_to_silver: src/glue_scripts/bronze_to_silver.md
   - build_lambda: src/build_lambda.md
+  - TerraformCodes:
+    - main: main.md
 
-theme:
-  name: material
-  features:
-    - navigation.tabs
-    - navigation.expand
+theme: material
 plugins:
   - mkdocstrings
+
 watch:
   - .
