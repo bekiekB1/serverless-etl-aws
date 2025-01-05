@@ -1,7 +1,7 @@
 # Learn Event-Driven ETL Pipeline with AWS Serverless
 
-## Project Description 
-This project demonstrates how to build an event-driven ETL (Extract, Transform, Load) pipeline using AWS Serverless services. The pipeline ingests NYC Taxi data monthly, processes it through various stages (raw, transformed), and loads it into a data warehouse for analysis. 
+## Project Description
+This project demonstrates how to build an event-driven ETL (Extract, Transform, Load) pipeline using AWS Serverless services. The pipeline ingests NYC Taxi data monthly, processes it through various stages (raw, transformed), and loads it into a data warehouse for analysis.
 
 ### Key Features
 
@@ -60,15 +60,15 @@ export PYTHONPATH=$PYTHONPATH:$PWD
 cd terraform
 terraform init
 
-python scripts/build_lambda.py # --overwrite, if need to overwrite       
+python scripts/build_lambda.py # --overwrite, if need to overwrite
 python scripts/build_lambda.py --layer requests
 
 
 terraform validate
 terraform plan
 terraform apply
-aws lambda invoke --function-name nytaxi_orchestrator output_orchestrator.txt
 
+aws lambda invoke --function-name nytaxi_fetch_raw_data nytaxi_fetch_raw_data.txt
 
 
 
@@ -125,7 +125,7 @@ The diagram will be updated to reflect the services and workflow as progress con
 
 ## Prerequisites
 
-**AWS Account**: Sign up for AWS Free Tier. 
+**AWS Account**: Sign up for AWS Free Tier.
 
 **AWS IAM USER**: Create an IAM User called `admin-user` with Administrative Previlege
 
@@ -160,7 +160,7 @@ aws iam list-users
 ```bash
 cd terraform
 # add provider.tf
-terraform fmt # Autoformat 
+terraform fmt # Autoformat
 terraform init # Intialize
 
 # Create additional variables.tf
@@ -170,7 +170,7 @@ terraform init # Intialize
 ```bash
 # Define resources, roles and access in main.tf
 terraform validate
-terraform plan 
+terraform plan
 terraform apply
 ```
 
@@ -184,21 +184,21 @@ Note: Using harcoded Pandas SDK. [ARN LINK](https://aws-sdk-pandas.readthedocs.i
 
 1. **`aws_s3_bucket.my_bucket`:**
     - Creates an S3 bucket with a name defined by the variable `var.s3bronze_nyctaxi`.
-        
+
         **`aws_s3_bucket_versioning.versioning`:**
-        
+
         - Enables versioning for the S3 bucket `my_bucket`.
-        
+
         **`aws_s3_bucket_server_side_encryption_configuration.encryption`:**
-        
+
         - Configures server-side encryption using the AES256 algorithm to encrypt objects stored in the bucket.
-        
+
         **`aws_s3_bucket_public_access_block.public_access_block`:**
-        
+
         - Blocks public access to the bucket by disabling public ACLs and policies.
-        
+
         **`aws_s3_bucket_lifecycle_configuration.bucket_lifecycle`:**
-        
+
         - Adds a lifecycle rule for the bucket to manage object transitions and expiration:
         - Moves objects to the `STANDARD_IA` (Infrequent Access) storage class after 30 days.
         - Deletes objects after 90 days.
@@ -219,17 +219,17 @@ Note: Using harcoded Pandas SDK. [ARN LINK](https://aws-sdk-pandas.readthedocs.i
 
 1. **`aws_s3_bucket.lambda_code`:**
     - Creates another S3 bucket for storing Lambda code, appending `lambda-code` to the bucket name.
-    
+
     **`aws_s3_bucket_versioning.lambda_code_versioning`:**
-    
+
     - Enables versioning for the Lambda code bucket.
-    
+
     **`aws_s3_bucket_public_access_block.lambda_code_public_access_block`:**
-    
+
     - Blocks public access for the Lambda code bucket.
-    
+
     **`aws_s3_object.lambda_code`:**
-    
+
     - Uploads the Lambda function code (`lambda_function.zip`) to the `lambda_code` bucket.
     - Uses the MD5 checksum to ensure the integrity of the uploaded file.
 

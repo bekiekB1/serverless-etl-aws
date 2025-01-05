@@ -8,12 +8,12 @@
 ### Data Extraction
 
 #### Data Source
-The pipeline uses the NYC yellow cab trip dataset stored in Parquet format, updated with a month delay.
+The pipeline uses the NYC yellow cab trip dataset stored in Parquet format, updated with two months delay(usally).
 
 `Data Website`: [Nyc Taxi Data](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
 
 #### Scheduling with Amazon EventBridge and CloudTrail:
-Amazon EventBridge applies a schedule rule (`cron(0 0 1 * ? *)`) to trigger the pipeline monthly at midnight on the first day of the month.
+Amazon EventBridge applies a schedule rule (`cron(0 11 * * ? *)`) to trigger the pipeline daily at 11 am(Because of irregularity in updates of nyc yellow taxi trip data). Lambda function handles if data is available and making sure no duplicate data is processed.
 
 `nytaxi-monthly-trigger`: Amazon EventBridge Sechule rule
 ![alt text](image.png)

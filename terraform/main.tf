@@ -1,5 +1,5 @@
 # ----------------------------------------------------------------------------
-# S3 Bucket Configuration for Bronze(Raw) data 
+# S3 Bucket Configuration for Bronze(Raw) data
 # ----------------------------------------------------------------------------
 resource "aws_s3_bucket" "my_bucket" {
   bucket = var.s3bronze_nyctaxi
@@ -153,14 +153,20 @@ resource "aws_lambda_function" "nytaxi_fetch_raw_data" {
   s3_key           = aws_s3_object.fetch_raw_data.key
   source_code_hash = filebase64sha256("../dist/fetch_raw_data.zip")
 
+  layers = [
+    aws_lambda_layer_version.requests_layer.arn
+  ]
+
   environment {
     variables = {
       REGION                  = var.region
       PROCESSOR_FUNCTION_NAME = aws_lambda_function.nytaxi_data_downloader.function_name
       NOTIFICATION_TOPIC_ARN  = aws_sns_topic.processing_notifications.arn
+      DYNAMODB_TABLE_NAME     = aws_dynamodb_table.nyc_taxi_processing.name
     }
   }
 }
+
 
 resource "aws_lambda_function" "s3_operations" {
   function_name = "s3_operations"
@@ -241,17 +247,55 @@ resource "aws_iam_role_policy" "lambda_invoke_policy" {
   })
 }
 
+
+# ------------------------------
+# Dynamodb: Manage Last Processed
+# ------------------------------
+resource "aws_dynamodb_table" "nyc_taxi_processing" {
+  name           = "nyc-taxi-processing"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "id"
+
+  attribute {
+    name = "id"
+    type = "S"
+  }
+}
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem"
+        ]
+        Resource = aws_dynamodb_table.nyc_taxi_processing.arn
+      }
+    ]
+  })
+}
 # ------------------------------
 # EventBridge Rule
 # ------------------------------
-resource "aws_cloudwatch_event_rule" "monthly_trigger" {
-  name                = "nytaxi-monthly-trigger"
-  description         = "Triggers NYC Taxi data processing workflow monthly"
-  schedule_expression = "cron(0 0 1 * ? *)"
+resource "aws_cloudwatch_event_rule" "daily_taxi_check" {
+  name                = "nytaxi-daily-check"
+  description         = "Checks daily for new NYC Taxi data availability"
+  # Run daily at midnight UTC
+  schedule_expression = "cron(0 11 * * ? *)"
+
+  tags = {
+    Environment = "production"
+    Service     = "nyc-taxi-processing"
+  }
 }
 
 resource "aws_cloudwatch_event_target" "lambda_target" {
-  rule      = aws_cloudwatch_event_rule.monthly_trigger.name
+  rule      = aws_cloudwatch_event_rule.daily_taxi_check.name
   target_id = "TriggerNYTaxiOrchestrator"
   arn       = aws_lambda_function.nytaxi_fetch_raw_data.arn
 }
@@ -264,7 +308,7 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.nytaxi_fetch_raw_data.function_name
   principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.monthly_trigger.arn
+  source_arn    = aws_cloudwatch_event_rule.daily_taxi_check.arn
 }
 
 # ------------------------------
@@ -393,7 +437,7 @@ resource "aws_iam_role_policy" "glue_s3_access" {
 resource "aws_iam_role_policy" "glue_lambda_access" {
   name = "glue_lambda_access"
   role = aws_iam_role.glue_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -415,7 +459,7 @@ resource "aws_iam_role_policy" "glue_lambda_access" {
 resource "aws_iam_role_policy" "glue_cloudwatch_access" {
   name = "glue_cloudwatch_access"
   role = aws_iam_role.glue_role.id
-  
+
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -480,7 +524,7 @@ resource "aws_cloudwatch_log_group" "bronze_to_silver_logs" {
 resource "aws_cloudwatch_event_rule" "s3_trigger" {
   name        = "detect-new-taxi-data"
   description = "Detect new data in raw folder via CloudTrail"
-  
+
   event_pattern = jsonencode({
     source      = ["aws.s3"]
     detail-type = ["AWS API Call via CloudTrail"]
@@ -508,12 +552,12 @@ resource "aws_glue_trigger" "start_workflow" {
   name          = "start_bronze_to_silver"
   type          = "EVENT"
   workflow_name = aws_glue_workflow.nytaxi_workflow.name
-  
+
   event_batching_condition {
     batch_size   = 1
     batch_window = 900  # 15 minutes to account for CloudTrail delay
   }
-  
+
   actions {
     job_name = aws_glue_job.bronze_to_silver.name
     arguments = {
@@ -666,11 +710,11 @@ resource "aws_cloudtrail" "s3_trail" {
   s3_bucket_name               = aws_s3_bucket.cloudtrail.id
   include_global_service_events = false
   is_multi_region_trail        = false
-  
+
   event_selector {
     read_write_type           = "WriteOnly"
     include_management_events = false
-    
+
     data_resource {
       type   = "AWS::S3::Object"
       values = ["${aws_s3_bucket.my_bucket.arn}/nyc_taxi/"]
